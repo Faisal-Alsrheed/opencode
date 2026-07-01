@@ -1,0 +1,33 @@
+name: fork-sync-temp
+
+on:
+  push:
+    branches: [claude/fork-sync-nt8oz8]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-sync-temp
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fast-forward dev from upstream (merge-upstream)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "Repository: ${{ github.repository }}"
+          echo "Syncing 'dev' from upstream parent..."
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/merge-upstream" \
+            -f branch=dev
+          echo "----- dev after sync -----"
+          gh api "repos/${{ github.repository }}/branches/dev" \
+            --jq '.commit.sha + "  " + .commit.commit.message'
