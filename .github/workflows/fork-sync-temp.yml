@@ -1,8 +1,10 @@
 name: fork-sync-temp
 
+# Manual sync of the fork's `dev` branch with its upstream parent.
+# NOTE: the default GITHUB_TOKEN cannot update files under .github/workflows/,
+# and the upstream sync includes workflow changes, so this needs a PAT
+# (classic, with `repo` + `workflow` scopes) stored as the secret SYNC_TOKEN.
 on:
-  push:
-    branches: [claude/fork-sync-nt8oz8]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +20,7 @@ jobs:
     steps:
       - name: Fast-forward dev from upstream (merge-upstream)
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
         run: |
           set -e
           echo "Repository: ${{ github.repository }}"
