@@ -1,0 +1,71 @@
+name: sync-upstream
+
+# Keeps this fork's `dev` branch in sync with the upstream opencode repo.
+#
+# Requires a repo secret named SYNC_TOKEN: a *classic* Personal Access Token
+# with `repo` + `workflow` scopes. The built-in GITHUB_TOKEN cannot be used
+# because upstream changes touch files under .github/workflows/, which GitHub
+# forbids the default token from writing (HTTP 422).
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily at 06:00 UTC
+  workflow_dispatch: # manual "Run workflow" button
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: https://github.com/sst/opencode.git
+  UPSTREAM_BRANCH: dev
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify SYNC_TOKEN is configured
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          if [ -z "${SYNC_TOKEN}" ]; then
+            echo "::error::SYNC_TOKEN secret is not set. Create a classic PAT with 'repo' + 'workflow' scopes and add it as the SYNC_TOKEN Actions secret (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Sync dev from upstream
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream "${UPSTREAM_REPO}"
+          git fetch --no-tags upstream "${UPSTREAM_BRANCH}"
+
+          echo "Local dev HEAD:       $(git rev-parse HEAD)"
+          echo "Upstream ${UPSTREAM_BRANCH} HEAD:  $(git rev-parse upstream/${UPSTREAM_BRANCH})"
+
+          if git merge-base --is-ancestor HEAD "upstream/${UPSTREAM_BRANCH}"; then
+            if [ "$(git rev-parse HEAD)" = "$(git rev-parse upstream/${UPSTREAM_BRANCH})" ]; then
+              echo "Already up to date. Nothing to do."
+              exit 0
+            fi
+            echo "Fast-forwarding dev to upstream/${UPSTREAM_BRANCH}..."
+            git merge --ff-only "upstream/${UPSTREAM_BRANCH}"
+          else
+            echo "dev has diverged from upstream; creating a merge commit."
+            git merge --no-edit "upstream/${UPSTREAM_BRANCH}"
+          fi
+
+          git push origin HEAD:dev
+          echo "dev is now at: $(git rev-parse HEAD)"
